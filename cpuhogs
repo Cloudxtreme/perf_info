@@ -1,5 +1,15 @@
 #!/usr/bin/env perl
 
+# Graham Nicholls.  graham.nicholls@rockcons.co.uk 2018-02-10
+#
+# Gather cpu percentage stats for all processes a number of times, with an interval of (by default ) 10 seconds.
+# Sum these and display the top 10 (again by default) cpu-hogging processes.  Highly unscientific but practical
+# and easy way of gathering info about CPUHogs.
+# Runs on a remote (Unix/Linux) server, so has to work out the os version of the server.
+# In case you think - like me, that Perl is an abomination - this should have been done in Ruby (for it's easy os integration)
+# or Python (with it's less than easy system interface).  Where I work, Ruby is sadly considered a bit avant-garde.  
+# 
+
 use strict;
 use warnings;
 
@@ -11,23 +21,36 @@ my $debug_flag=FALSE;
 my $html_output=FALSE;
 
 my $RESOLUTION=10;  # Interval between iteration of stats gathering 
+# Actually, Linux ps's tend to undersyand SYSV and BSD options, so we we should probably stick to BSD, which is what SunOS uses.
+my $LINUX_PS="ps -eopid,pcpu,comm";
+my $OTHER_PS="ps axopid,pcpu,comm";
 
-# This is the bit that matters:  Loops for $run_time count, gathering output from the appropriate ps command.
-# this is stored in a hash keyed by "pid:command" so that commands running multiple times aren't aggregated - 
-# this bahaviour might be wrong - possibly we should add the -a argument to coalesce cpu activity together for
-# commands with the same name? Also, we should consider what criterion are best to select busy processes - is
-# it the case that we are only interested in processes which are running at the end of the collection period
-# on the grounds that we aren't really interested in something which has finished running?
+# This is the bit that matters:  Loops for $run_time/$INTERVAL count, gathering output from the appropriate 
+# ps command.  This is stored in a hash keyed by "pid:command" so that commands running multiple times 
+# aren't aggregated - this bahaviour might be wrong - possibly we should add the -a argument to coalesce 
+# cpu activity together for  commands with the same name? Also, we should consider what criterion are best 
+# to select busy processes - is it the case that we are only interested in processes which are running at 
+# the end of the collection period on the grounds that we aren't really interested in something which has 
+# finished running?
 sub cpuhogs {
   my $server=shift || die ("No servername in cpuhogs function");
   my $run_time=shift || die("No run_time specified in cpuhogs function");
-  #my $iterations=int($run_time/$RESOLUTION);
-  #if ($iterations < 1) { iterations=1; } # So we run at least once regardless of run_time etc.
+  my $ps_cmd;
+  my $iterations=int($run_time/$RESOLUTION);
+  if ($iterations < 1) { $iterations=1; } # So we run at least once regardless of run_time etc.
+  debug_msg("Running ps $iterations times to gather stats over $run_time seconds\n");
 
-  my $osname;
+  my $os_name;
   debug_msg("In cpuhogs, server=$server run_time=$run_time\n");
   check_ssh($server);
-  $osname=get_os($server);
+  $os_name=get_os($server);
+  if ( $os_name eq "linux" ) {
+    $ps_cmd=$LINUX_PS;
+  }
+  else {
+    $ps_cmd=$OTHER_PS;
+  }
+  debug_msg("Using ps command $ps_cmd\n");
   
 }
 
@@ -47,7 +70,7 @@ sub get_os {
   my $server=shift || die("No server specified in get_os()");
   my $osname=qx(uname -s);
   if ($osname =~ /[Ll]inux/) { 
-    debug_msg("os name of server $server is linux");
+    debug_msg("os name of server $server is linux\n");
     return("linux") ; 
   }
 
