@@ -51,6 +51,12 @@ sub cpuhogs {
     $ps_cmd=$OTHER_PS;
   }
   debug_msg("Using ps command $ps_cmd\n");
+  for (my $i; $i<= $iterations; $i++) {
+    my @process_info;
+    @process_info=qx($ps_cmd);
+    debug_msg("Process_info= @process_info\n");
+    sleep($RESOLUTION);
+  }
   
 }
 
