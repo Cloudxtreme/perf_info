@@ -1,0 +1,90 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+use constant TRUE=>1 ;
+use constant FALSE=>0 ;
+
+my $progname=$0;
+my $debug_flag=FALSE;
+my $html_output=FALSE;
+
+my $RESOLUTION=10;  # Interval between iteration of stats gathering 
+
+# This is the bit that matters:  Loops for $run_time count, gathering output from the appropriate ps command.
+# this is stored in a hash keyed by "pid:command" so that commands running multiple times aren't aggregated - 
+# this bahaviour might be wrong - possibly we should add the -a argument to coalesce cpu activity together for
+# commands with the same name? Also, we should consider what criterion are best to select busy processes - is
+# it the case that we are only interested in processes which are running at the end of the collection period
+# on the grounds that we aren't really interested in something which has finished running?
+sub cpuhogs {
+  my $server=shift || die ("No servername in cpuhogs function");
+  my $run_time=shift || die("No run_time specified in cpuhogs function");
+  #my $iterations=int($run_time/$RESOLUTION);
+  #if ($iterations < 1) { iterations=1; } # So we run at least once regardless of run_time etc.
+
+  my $osname;
+  debug_msg("In cpuhogs, server=$server run_time=$run_time\n");
+  check_ssh($server);
+  $osname=get_os($server);
+  
+}
+
+sub check_ssh {
+  my $server=shift || die("No server specified in check_os()");
+  my $ssh_out;
+  my $rval;
+  $ssh_out=qx(ssh $server /bin/ls -l /tmp);
+  $rval=$?;
+  debug_msg("ssh test returned [$rval]\n");
+  if ($rval != 0 ) { return(FALSE); }
+  return(TRUE);
+    
+}
+
+sub get_os {
+  my $server=shift || die("No server specified in get_os()");
+  my $osname=qx(uname -s);
+  if ($osname =~ /[Ll]inux/) { 
+    debug_msg("os name of server $server is linux");
+    return("linux") ; 
+  }
+
+  debug_msg("os name of server $server is other");
+  return("other");
+}
+
+sub debug_msg {
+  my $from;
+  if ($debug_flag) {
+    $from=(caller(0))[2];
+    print STDERR  "DEBUG: (called from line $from) @_" ;
+  }
+}
+
+# Starts here:
+my $server;
+my $arg;
+my $run_time = 30;
+
+while ($arg = shift ) {
+ if ($arg eq "-d") { $debug_flag=TRUE; debug_msg("Enabled debugging\n"); }
+ elsif ($arg =~ /-h(tml)?/ ) { $html_output = TRUE ; }
+ elsif ($arg eq "-s") { $server = shift || die("-s takes an argument");  }
+ elsif ($arg =~ /-s([a-zA-Z]\w+)/ ) { $server = $1 ; }
+ elsif ($arg eq "-i") { $run_time = shift || die("-i takes an argument"); }
+ elsif ($arg =~ /-i(\d+)/ ) { $run_time = $1 ; }
+ else { die("Sorry, I don't understand [$arg] server=[$server]"); }
+}
+
+die("No servername specified (with -s)") if not $server;
+
+if ($html_output) {
+ debug_msg("Running CPUHogs against server $server for an run_time of $run_time seconds outputting as HTML\n"); }
+else {
+ debug_msg("Running CPUHogs against server $server for an run_time of $run_time seconds outputting as text\n");
+}
+
+cpuhogs($server,$run_time);
+exit (0);
