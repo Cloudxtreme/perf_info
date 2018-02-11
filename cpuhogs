@@ -18,13 +18,14 @@ use constant FALSE=>0 ;
 
 my $progname=$0;
 my $debug_flag=FALSE;
-my $html_output=FALSE;
+my $header_output=FALSE;
 
 my $RESOLUTION=10;  # Interval between iteration of stats gathering 
 # Actually, Linux ps's tend to undersyand SYSV and BSD options, so we we should probably stick to BSD, which is what SunOS uses.
 my $LINUX_PS="ps -eopid,pcpu,comm";
 my $OTHER_PS="ps axopid,pcpu,comm";
 my $THRESHOLD=1.0; # don't bother counting processes taking less than this % CPU
+my $ssh_options="-ostricthostkeychecking=no";
 
 # This is the bit that matters:  Loops for $run_time/$INTERVAL count, gathering output from the appropriate 
 # ps command.  This is stored in a hash keyed by "pid:command" so that commands running multiple times 
@@ -58,7 +59,7 @@ sub cpuhogs {
     my $this_process_info;
     my @this_process;
 
-    @process_info=qx($ps_cmd);
+    @process_info=qx(ssh $ssh_options $server $ps_cmd);
     my $header=shift(@process_info); #get rid of the header - ps -h should do this but changes other things
     while($this_process_info=shift(@process_info)) {
       chomp $this_process_info;
@@ -82,13 +83,15 @@ sub cpuhogs {
     debug_msg("Sleeping for $RESOLUTION seconds\n");
     sleep($RESOLUTION);
   }
-  print("Top cpu using processes over previous $run_time seconds\n");
-  print "CPU%   PID  COMMAND\n";
+  if ($header_output) {
+    print("Top cpu using processes over previous $run_time seconds\n");
+    print "CPU%   PID  COMMAND\n";
+  }
   foreach my $key (keys %cpuhogs) {
     if ($key !~ /^(\d+):(.*)$/) { die("Logic error - key doesn't match regex in [$key]") ; }
     my $pid=$1;
     my $command=$2;
-    print "$cpuhogs{$key} $pid $command\n";
+    printf("%3.1f %6d %s\n",$cpuhogs{$key}, $pid, $command);
   }
 }
 
@@ -96,7 +99,7 @@ sub check_ssh {
   my $server=shift || die("No server specified in check_os()");
   my $ssh_out;
   my $rval;
-  $ssh_out=qx(ssh $server /bin/ls -l /tmp);
+  $ssh_out=qx(ssh $ssh_options $server /bin/ls -l /tmp);
   $rval=$?;
   debug_msg("ssh test returned [$rval]\n");
   if ($rval != 0 ) { return(FALSE); }
@@ -127,24 +130,22 @@ sub debug_msg {
 my $server;
 my $arg;
 my $run_time = 30;
+my $full_output=FALSE;
 
 while ($arg = shift ) {
  if ($arg eq "-d") { $debug_flag=TRUE; debug_msg("Enabled debugging\n"); }
- elsif ($arg =~ /-h(tml)?/ ) { $html_output = TRUE ; }
+ elsif ($arg =~ /-h(eader)?/ ) { $header_output = TRUE ; }
  elsif ($arg eq "-s") { $server = shift || die("-s takes an argument");  }
  elsif ($arg =~ /-s([a-zA-Z]\w+)/ ) { $server = $1 ; }
  elsif ($arg eq "-r") { $run_time = shift || die("-i takes an argument"); }
+ elsif ($arg -q "-f"){ $full_output=TRUE ;}
  elsif ($arg =~ /-r(\d+)/ ) { $run_time = $1 ; }
  else { die("Sorry, I don't understand [$arg] server=[$server]"); }
 }
 
 die("No servername specified (with -s)") if not $server;
 
-if ($html_output) {
- debug_msg("Running CPUHogs against server $server for an run_time of $run_time seconds outputting as HTML\n"); }
-else {
- debug_msg("Running CPUHogs against server $server for an run_time of $run_time seconds outputting as text\n");
-}
+debug_msg("Running CPUHogs against server $server for an run_time of $run_time seconds \n");
 
 cpuhogs($server,$run_time);
 exit (0);
