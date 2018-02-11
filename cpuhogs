@@ -138,7 +138,7 @@ while ($arg = shift ) {
  elsif ($arg eq "-s") { $server = shift || die("-s takes an argument");  }
  elsif ($arg =~ /-s([a-zA-Z]\w+)/ ) { $server = $1 ; }
  elsif ($arg eq "-r") { $run_time = shift || die("-i takes an argument"); }
- elsif ($arg -q "-f"){ $full_output=TRUE ;}
+ elsif ($arg eq "-f") { $full_output=TRUE ;}
  elsif ($arg =~ /-r(\d+)/ ) { $run_time = $1 ; }
  else { die("Sorry, I don't understand [$arg] server=[$server]"); }
 }
