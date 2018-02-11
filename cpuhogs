@@ -24,6 +24,7 @@ my $RESOLUTION=10;  # Interval between iteration of stats gathering
 # Actually, Linux ps's tend to undersyand SYSV and BSD options, so we we should probably stick to BSD, which is what SunOS uses.
 my $LINUX_PS="ps -eopid,pcpu,comm";
 my $OTHER_PS="ps axopid,pcpu,comm";
+my $THRESHOLD=1.0; # don't bother counting processes taking less than this % CPU
 
 # This is the bit that matters:  Loops for $run_time/$INTERVAL count, gathering output from the appropriate 
 # ps command.  This is stored in a hash keyed by "pid:command" so that commands running multiple times 
@@ -37,27 +38,55 @@ sub cpuhogs {
   my $run_time=shift || die("No run_time specified in cpuhogs function");
   my $ps_cmd;
   my $iterations=int($run_time/$RESOLUTION);
+  my %process_info; # list keyed by pid:command, so a reused pid doesn't confuse things if we run over a long interval.
+
   if ($iterations < 1) { $iterations=1; } # So we run at least once regardless of run_time etc.
   debug_msg("Running ps $iterations times to gather stats over $run_time seconds\n");
 
   my $os_name;
-  debug_msg("In cpuhogs, server=$server run_time=$run_time\n");
-  check_ssh($server);
+  debug_msg("server=$server run_time=$run_time\n");
+  check_ssh($server) || die ("Server $server not responding to ssh\n");
+
   $os_name=get_os($server);
-  if ( $os_name eq "linux" ) {
-    $ps_cmd=$LINUX_PS;
-  }
-  else {
-    $ps_cmd=$OTHER_PS;
-  }
+  if ( $os_name eq "linux" ) { $ps_cmd=$LINUX_PS; }
+  else { $ps_cmd=$OTHER_PS; }
+
   debug_msg("Using ps command $ps_cmd\n");
-  for (my $i; $i<= $iterations; $i++) {
+  my %cpuhogs=();
+  for (my $i=1; $i < $iterations; $i++) {
     my @process_info;
+    my $this_process_info;
+    my @this_process;
+
     @process_info=qx($ps_cmd);
-    debug_msg("Process_info= @process_info\n");
-    sleep($RESOLUTION);
+    my $header=shift(@process_info); #get rid of the header - ps -h should do this but changes other things
+    while($this_process_info=shift(@process_info)) {
+      chomp $this_process_info;
+      if ($this_process_info !~ /^\s*(\d+)\s+(\d+\.\d+)\s+(.*)$/ ) {
+        die("String [$this_process_info] does not match regex\n");
+      }
+      my $pid=$1;
+      my $pcpu=$2;
+      my $full_command=$3;
+      $full_command =~ s/\s+/ /g;
+      my $key="$pid:$full_command";
+
+      if ($pcpu > $THRESHOLD) {
+        debug_msg("Adding : pid=$pid, pcpu=$pcpu, comm=[$full_command] key=[$key]\n");
+        if (undef $cpuhogs{$key}  ) {
+          $cpuhogs{$key}=$pcpu; }
+        else {
+          $cpuhogs{$key}+=$pcpu; }
+      }
+    }
+    debug_msg("Sleeping for $RESOLUTION seconds\n");
+    sler int "CPU%   PID  COMMAND\n";
+  foreach my $key (keys %cpuhogs) {
+    if ($key !~ /^(\d+):(.*)$/) { die("Logic error - key doesn't match regex in [$key]") ; }
+    my $pid=$1;
+    my $command=$2;
+    print "$cpuhogs{$key} $pid $command\n";
   }
-  
 }
 
 sub check_ssh {
@@ -69,7 +98,6 @@ sub check_ssh {
   debug_msg("ssh test returned [$rval]\n");
   if ($rval != 0 ) { return(FALSE); }
   return(TRUE);
-    
 }
 
 sub get_os {
@@ -102,8 +130,8 @@ while ($arg = shift ) {
  elsif ($arg =~ /-h(tml)?/ ) { $html_output = TRUE ; }
  elsif ($arg eq "-s") { $server = shift || die("-s takes an argument");  }
  elsif ($arg =~ /-s([a-zA-Z]\w+)/ ) { $server = $1 ; }
- elsif ($arg eq "-i") { $run_time = shift || die("-i takes an argument"); }
- elsif ($arg =~ /-i(\d+)/ ) { $run_time = $1 ; }
+ elsif ($arg eq "-r") { $run_time = shift || die("-i takes an argument"); }
+ elsif ($arg =~ /-r(\d+)/ ) { $run_time = $1 ; }
  else { die("Sorry, I don't understand [$arg] server=[$server]"); }
 }
 
