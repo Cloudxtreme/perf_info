@@ -80,7 +80,10 @@ sub cpuhogs {
       }
     }
     debug_msg("Sleeping for $RESOLUTION seconds\n");
-    sler int "CPU%   PID  COMMAND\n";
+    sleep($RESOLUTION);
+  }
+  print("Top cpu using processes over previous $run_time seconds\n");
+  print "CPU%   PID  COMMAND\n";
   foreach my $key (keys %cpuhogs) {
     if ($key !~ /^(\d+):(.*)$/) { die("Logic error - key doesn't match regex in [$key]") ; }
     my $pid=$1;
